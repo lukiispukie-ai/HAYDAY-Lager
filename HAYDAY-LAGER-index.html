@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-slate-900">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hay Day Lagerverwaltung</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="h-full text-slate-100 flex flex-col justify-between bg-slate-950">
+
+  <!-- Haupt-Container für Mobile-Ansicht -->
+  <div id="app" class="flex-1 max-w-md w-full mx-auto bg-slate-900 flex flex-col h-full shadow-2xl relative overflow-hidden border-x border-slate-800">
+    
+    <!-- Header -->
+    <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700/60 p-4 sticky top-0 z-10 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">
+          <i class="fa-solid fa-wheat-awn"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-bold text-white tracking-tight">Lagerbestand</h1>
+          <p class="text-[11px] text-emerald-400 flex items-center gap-1.5" id="sync-status">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Live Synchronisiert
+          </p>
+        </div>
+      </div>
+      <button onclick="openWizard()" class="bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center shadow-lg shadow-indigo-600/30">
+        <i class="fa-solid fa-plus mr-1.5"></i> Bearbeiten
+      </button>
+    </header>
+
+    <!-- DASHBOARD REITER -->
+    <main id="tab-dashboard" class="flex-1 overflow-y-auto p-4 space-y-3">
+      
+      <!-- Suche auf dem Dashboard -->
+      <div class="relative sticky top-0 z-10">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+        <input 
+          type="text" 
+          id="dashboard-search" 
+          oninput="renderDashboard()" 
+          placeholder="Artikel im Bestand suchen..." 
+          class="w-full bg-slate-800/90 backdrop-blur border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-lg"
+        >
+      </div>
+
+      <!-- Summe Info -->
+      <div class="flex justify-between items-center px-1 text-xs text-slate-400 pt-1">
+        <span>Gefundene Artikel: <strong id="item-count-badge" class="text-slate-200">0</strong></span>
+        <span>Zeige alle 200+ Items</span>
+      </div>
+
+      <!-- Artikel-Liste Dashboard -->
+      <div id="inventory-list" class="space-y-2 pb-16">
+        <!-- Dynamische Einträge werden hier geladen -->
+      </div>
+    </main>
+
+    <!-- NAVIGATION BAR UNTEN -->
+    <nav class="bg-slate-800/95 backdrop-blur border-t border-slate-700/60 p-2 grid grid-cols-2 gap-2 sticky bottom-0 z-20">
+      <button onclick="switchTab('dashboard')" id="nav-dashboard" class="flex flex-col items-center py-2 rounded-xl text-indigo-400 bg-slate-700/60 font-medium transition">
+        <i class="fa-solid fa-boxes-stacked text-lg mb-0.5"></i>
+        <span class="text-xs">Dashboard</span>
+      </button>
+      <button onclick="openWizard()" id="nav-edit" class="flex flex-col items-center py-2 rounded-xl text-slate-400 hover:text-slate-200 transition">
+        <i class="fa-solid fa-pen-to-square text-lg mb-0.5"></i>
+        <span class="text-xs">Bestand bearbeiten</span>
+      </button>
+    </nav>
+
+    <!-- WIZARD POPUP (SCHRITT FÜR SCHRITT MODAL) -->
+    <div id="wizard-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 opacity-0 pointer-events-none transition-opacity duration-200">
+      <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-5 space-y-4 shadow-2xl transform translate-y-full sm:translate-y-0 transition-transform duration-200 max-h-[90vh] flex flex-col" id="wizard-content">
+        
+        <!-- Modal Header -->
+        <div class="flex justify-between items-center border-b border-slate-700/80 pb-3 flex-shrink-0">
+          <div>
+            <h3 class="text-base font-bold text-white" id="wizard-title">Bestand Bearbeiten</h3>
+            <p class="text-xs text-slate-400" id="wizard-step-indicator">Schritt 1 von 3</p>
+          </div>
+          <button onclick="closeWizard()" class="text-slate-400 hover:text-white p-1">
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+
+        <!-- SCHRITT 1: Aktion wählen -->
+        <div id="step-1" class="space-y-4 py-2">
+          <label class="block text-sm font-medium text-slate-300">Was möchtest du tun?</label>
+          <div class="space-y-3">
+            <button onclick="selectAction('add')" id="btn-action-add" class="w-full p-4 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-300 flex items-center justify-between hover:border-emerald-500/50 transition">
+              <span class="flex items-center text-sm font-semibold text-emerald-400">
+                <i class="fa-solid fa-circle-plus text-xl mr-3"></i> Item hinzugefügt
+              </span>
+              <i class="fa-solid fa-chevron-right text-xs text-slate-500"></i>
+            </button>
+            <button onclick="selectAction('remove')" id="btn-action-remove" class="w-full p-4 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-300 flex items-center justify-between hover:border-rose-500/50 transition">
+              <span class="flex items-center text-sm font-semibold text-rose-400">
+                <i class="fa-solid fa-circle-minus text-xl mr-3"></i> Item rausgenommen
+              </span>
+              <i class="fa-solid fa-chevron-right text-xs text-slate-500"></i>
+            </button>
+          </div>
+
+          <button onclick="goToStep(2)" id="step1-next-btn" disabled class="w-full mt-4 bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition shadow-lg">
+            Weiter <i class="fa-solid fa-arrow-right ml-1"></i>
+          </button>
+        </div>
+
+        <!-- SCHRITT 2: Artikel wählen -->
+        <div id="step-2" class="space-y-3 hidden flex-1 flex flex-col min-h-0">
+          <label class="block text-sm font-medium text-slate-300">Artikel auswählen:</label>
+          
+          <!-- Suchleiste im Popup -->
+          <div class="relative flex-shrink-0">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input 
+              type="text" 
+              id="wizard-search" 
+              oninput="filterWizardItems()" 
+              placeholder="Suchen (z.B. Wolle, Ananas)..." 
+              class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+          </div>
+
+          <!-- Artikelliste scrollbar -->
+          <div id="wizard-items-list" class="overflow-y-auto border border-slate-700/60 rounded-xl p-1 bg-slate-900/50 space-y-1 max-h-56 flex-1">
+            <!-- Dynamisch -->
+          </div>
+
+          <div class="flex gap-2 pt-2 flex-shrink-0">
+            <button onclick="goToStep(1)" class="w-1/3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-3 rounded-xl text-sm transition">
+              Zurück
+            </button>
+            <button onclick="goToStep(3)" id="step2-next-btn" disabled class="w-2/3 bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl text-sm transition shadow-lg">
+              Weiter <i class="fa-solid fa-arrow-right ml-1"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- SCHRITT 3: Menge eingeben -->
+        <div id="step-3" class="space-y-4 py-2 hidden">
+          <div>
+            <span id="selected-summary-badge" class="inline-block bg-indigo-500/10 text-indigo-400 text-xs px-3 py-1 rounded-full border border-indigo-500/30 mb-2 font-medium">
+              Wolle • Hinzugefügt
+            </span>
+            <label class="block text-sm font-medium text-slate-300">Wie viel Mengen Einheiten?</label>
+          </div>
+
+          <div class="relative">
+            <input 
+              type="number" 
+              id="wizard-quantity" 
+              min="1" 
+              placeholder="z. B. 12" 
+              class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-2xl font-bold text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <button onclick="goToStep(2)" class="w-1/3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-3 rounded-xl text-sm transition">
+              Zurück
+            </button>
+            <button onclick="submitTransaction()" class="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-sm transition shadow-lg shadow-emerald-600/30">
+              Abschicken & Speichern
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Firebase Integration -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      doc, 
+      onSnapshot, 
+      addDoc, 
+      serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // 200+ Hay Day Items Liste
+    const ALL_ITEMS = [
+      "Affogato", "Ananas", "Ananas-Kokosnuss-Riegel", "Ananaskuchen", "Ananassaft", "Apfel", 
+      "Apfel-Ingwer-Tee", "Apfelbaum", "Apfelhaferbrei", "Apfelkuchen", "Apfelmarmelade", 
+      "Apfelsaft", "Armband", "Ätherisches Ingweröl", "Ätherisches Kamillenöl", "Ätherisches Minzöl", 
+      "Ätherisches Zitronenöl", "Aubergine", "Auflauf", "Bananen", "Bananenbrot", 
+      "Bananenpfannkuchen", "Bananensplit", "Bananenstaude", "Baumwolle", "Baumwollhemd", 
+      "Baumwollstoff", "Beerensaft", "Beerensmoothie", "Beerentorte", "Bestreuter Donut", 
+      "Bienenwachs", "Blackberry", "Blaubeer-Käsetorte", "Blaubeer-Muffin", "Blaubeerchutney", 
+      "Blaubeeren", "Blaubeerwaffeln mit weißer Schokolade", "Blaue Wollmütze", "Blauer Köder", 
+      "Blauer Pullover", "Blumenanhänger", "Blumenkerze", "Blumenkrone", "Blumenschal", 
+      "Bohnendip", "Bohnensalat", "Brauner Zucker", "Brokkoli", "Brokkolisuppe", "Brombeer-Muffin", 
+      "Brombeermarmelade", "Brombeerstrauch", "Brot", "Bunte Kerzen", "Buntes Omelett", "Butter", 
+      "Butter-Popcorn", "Caffé Latte", "Chili Pfeffer", "Chili-Eintopf", "Chili-Popcorn", 
+      "Chilihäppchen", "Chilikaramelle", "Cloche", "Corndog", "Cowboy-Chaps aus Wolle", "Decke", 
+      "Diamantring", "Dosenfisch", "Ei", "Ei-Sandwich", "Eiersushi", "Einfache Waffeln", 
+      "Einfacher Cupcake", "Einfacher Donut", "Eingelegte Gurken", "Eiskaffee mit Banane", "Eistee", 
+      "Eisenarmband", "Eisenbarren", "Eisenerz", "Eleganter Strauß", "Entenfeder", "Entenfalle", 
+      "Entspannungsduft", "Entspannungskissen", "Erdbeerjoghurt", "Erdbeerkarten / Erdbeerkerze", 
+      "Erdbeere", "Erdbeereis", "Erdbeermarmelade", "Erdbeertorte", "Erdnussbutter-Marmelade-Sandwich", 
+      "Erdnussbutter-Milchshake", "Erdnusskaramelle", "Erdnussnudeln", "Erdnusspflanze", "Erdnüsse", 
+      "Espresso", "Falafel", "Feta-Kartoffel-Törtchen", "Fetakuchen", "Fetasalat", "Fischburger", 
+      "Fischernetz", "Fischfilet", "Fisch mit Pommes", "Fischpastete", "Fischspieß", "Fischsuppe", 
+      "Fischtaco", "Fleischeimer", "Frische Nudeln", "Frischeduft", "Frischer Haferbrei", 
+      "Frittierter Schokoriegel", "Frucht-Milchshake", "Fruchtsalat", "Fruchtsorbet", 
+      "Frühstücks-Waffeln", "Frühstücksschüssel", "Frühlingsomelett", "Gebratener Reis", 
+      "Gebratener Tofu", "Geburtstagsstrauß", "Gedämpfte Muscheln", "Gefüllte Paprikaschoten", 
+      "Gefüllter Donut", "Gegrillte Aubergine", "Gegrillte Muscheln", "Gegrillter Lammspieß", 
+      "Gegrillter Spargel", "Gegrilltes Zwiebel-Käse-Sandwich", "Geleebohnen", "Gemischter Smoothie", 
+      "Gemüsebouquet", "Gemüselasagne", "Gemüseplatte", "Glockenpfeffer", "Gnocchi", "Goldbarren", 
+      "Golderz", "Goldener Köder", "Granatapfel", "Granatapfelbaum", "Granatapfeltorte", 
+      "Granatapfeltee", "Grilltomaten", "Grillzwiebel", "Große Sushirolle", "Grüner Köder", 
+      "Grüner Smoothie", "Grüner Tee", "Guava", "Guaven-Cupcake", "Guavenbaum", "Guavenkompott", 
+      "Guavensaft", "Gurke", "Gurkensandwich", "Gurkensmoothie", "Hafer", "Halskette", 
+      "Hamburger", "Hand-Pies", "Heiße Schokolade", "Himbeere", "Himbeer-Mokka", "Himbeer-Muffin", 
+      "Himbeerkerze", "Himbeermarmelade", "Himbeerstrauch", "Honig", "Honig-Apfelkuchen", 
+      "Honig-Popcorn", "Honigerdnüsse", "Honiggesichtsmaske", "Honigseife", "Honigtee", 
+      "Honigtoast", "Honigwabe", "Hotdog", "Hühnerfutter", "Hummerfalle", "Hummerspieß", 
+      "Hummersuppe", "Hummersushi", "Hummerschwanz", "Hummus", "Hummuswrap", "Indigo", "Ingwer", 
+      "Joghurtsmoothie", "Kaffeebohne", "Kaffeestrauch", "Kakao", "Kakaobaum", "Kakaosmoothie", 
+      "Kamille", "Kamillentee", "Kandierter Apfel", "Karotte", "Karottenkuchen", "Karottensaft", 
+      "Karottentorte", "Kartoffel", "Kartoffelbrot", "Kartoffelomelett", "Kartoffelsuppe", "Käse", 
+      "Käsefondue", "Käseomelett", "Käsetorte", "Keks", "Kekscupcake", "Kicherbohneneintopf", 
+      "Kichererbsen", "Kimchi", "Kirsche", "Kirschbaum", "Kirscheis am Stiel", "Kirschmarmelade", 
+      "Kirschsaft", "Kissen", "Knoblauch", "Knoblauchbrot", "Knuspriger Donut", "Kohle", "Kohl", 
+      "Kohlsuppe", "Kokoseis", "Kokosnuss", "Kokospalme", "Kuhfutter", "Kürbis", "Kürbiskuchen", 
+      "Kürbissuppe", "Lamm-Döner-Wrap", "Lammkotelett", "Lammpfanne", "Lammsuppe", 
+      "Latte Macchiato mit Karamell", "Lebkuchenkeks", "Lemon", "Lily", "Lila Köder", "Lutscher", 
+      "Mais", "Maisbrot", "Makrone", "Mango", "Mangobaum", "Mangosaft", "Mayonnaise", 
+      "Meeresfrüchte-Salat", "Melonensaft", "Milch", "Milchtee", "Minze", "Minzeis", 
+      "Minzkaramelle", "Minztee", "Mokka", "Mokka-Milchshake", "Muschel-Linguine", 
+      "Muschel-Nigiri", "Muschelfleisch", "Muschelsuppe", "Nachos", "Naturjoghurt", "Nektarbusch", 
+      "Nudeln alla Carbonara", "Nudeln mit Brokkoli", "Nudeln mit Hummer", "Nudelsalat", 
+      "Nudelsuppe", "Ofenkartoffel", "Olive", "Olivenbaum", "Olivenöl", "Olivendip", "Orange", 
+      "Orangenbaum", "Orangenmarmelade", "Orangensaft", "Orangensalat", "Orangensorbet", 
+      "Orangentee", "Paprikasuppe", "Parmigiana", "Passionsfrucht", "Passionsfrucht-Dressing", 
+      "Passionsfruchtkuchen", "Passionsfruchtmarmelade", "Passionsfruchtsaft", "Peeling-Seife", 
+      "Pfannkuchen", "Pfirsich", "Pfirsichbaum", "Pfirsicheis", "Pfirsichkuchen", 
+      "Pfirsichmarmelade", "Pfingstrose", "Pikanter Fisch", "Pilz", "Pilznudeln", "Pilzpastete", 
+      "Pilzsalat", "Pilzsuppe", "Pizza", "Pizza Frutti di Mare", "Platinbarren", "Platinerz", 
+      "Pflaume", "Pflaumenbaum", "Pflaumenmarmelade", "Pflaumensmoothie", "Pommes mit Speck", 
+      "Popcorn", "Pullover", "Quesadilla", "Reis", "Reisbällchen", "Reisnudeln", "Reisomelett", 
+      "Reichhaltige Seife", "Rote Beete", "Rote-Bete-Salat", "Roter Köder", "Roter Schal", 
+      "Rustikaler Strauß", "Sahne", "Sahnedonut", "Sahnetorte", "Salat", "Salsa", "Samosa", 
+      "Schaffutter", "Scharfe Nudeln", "Scharfe Pizza", "Scharfer Bohnen-Döner", 
+      "Scharfer Bohnentaco", "Schicke Torte", "Schinkendonut", "Schokolade", "Schokoladenfondue", 
+      "Schokoladenkuchen", "Schokoladenrolle", "Schokoladenwaffeln", "Schokoladeneis", 
+      "Schoko-Popcorn", "Schokotorte", "Schwarze Bohnen", "Schwarzer-Sesam-Smoothie", 
+      "Schweinefutter", "Sesam-Eiscreme", "Sesamkrokant", "Shepherds Pie", "Silberbarren", 
+      "Silbererz", "Sirup", "Snackmix", "Sojabohne", "Sojasoße", "Sommerrollen", "Sommersalat", 
+      "Sonnenblumen", "Sonnenhut", "Spargel", "Spargel-Quiche", "Spargelsuppe", "Speck", 
+      "Speck und Eier", "Speckfondue", "Speckkuchen", "Specksalat", "Specksalat auf Toast", 
+      "Strahlender Strauß", "Sushirolle", "Süßer Haferbrei", "Süßer Strauß", "Taco", "Teeblatt", 
+      "Teekanne", "Tofudog", "Tomaten", "Tomatensoße", "Tomatensaft", "Tomatensupppe", "Ton", 
+      "Tontasse", "Toffee", "Topfpflanze", "Trauben", "Traubenmarmelade", "Traubensaft", 
+      "Trockenobst", "Tropischer Cupcake", "Tropischer Joghurt", "Tropischer Smoothie", 
+      "Tropisches Fondue", "Turm-Döner Supreme", "Überraschungsnetz", "Vanille-Milchshake", 
+      "Vanilleeis", "Vegetarischer Bagel", "Veredelte Kohle", "Violettes Kleid", 
+      "Vollrahmkaramelle", "Waffeln mit Beeren", "Wassermelone", "Weißer Zucker", "Weizen", 
+      "Weizenbündel", "Wintereintopf", "Wintergemüse", "Wolle", "Zarter Strauß", "Ziegenfutter", 
+      "Ziegenkäse", "Ziegenmilch", "Zitronenbaum", "Zitronencreme", "Zitronenkaramelle", 
+      "Zitronenkerze", "Zitronenkuchen", "Zitronenlotion", "Zitronentee", "Zitronentorte", 
+      "Zitrusparfüm", "Zuckerrohr", "Zuckerwatte", "Zylinder", "Zwiebel", "Zwiebeldog", 
+      "Zwiebelsuppe"
+    ];
+
+    // Status-Daten
+    let stockData = {}; // { ItemName: { amount: 10, lastTx: "+23" } }
+    let wizardSelection = { action: null, item: null };
+
+    // Firebase Setup
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'hayday-lager-app';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+      ? JSON.parse(__firebase_config) 
+      : {
+          apiKey: "demo-key",
+          authDomain: "demo.firebaseapp.com",
+          projectId: "demo-project",
+          storageBucket: "demo.appspot.com",
+          messagingSenderId: "123456789",
+          appId: "1:123456789:web:123456"
+        };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    async function init() {
+      // Initiale Bestandsstruktur für alle 200 Items
+      ALL_ITEMS.forEach(item => {
+        stockData[item] = { amount: 0, lastTx: null };
+      });
+
+      try {
+        await signInAnonymously(auth);
+      } catch (e) {
+        console.warn("Auth warning / notice", e);
+      }
+      
+      listenToDatabase();
+      renderDashboard();
+    }
+
+    function getTxCollection() {
+      // Nutze eine einfache Pfadstruktur für public data
+      return collection(db, 'hayday_transactions');
+    }
+
+    function listenToDatabase() {
+      try {
+        const txCollection = getTxCollection();
+
+        onSnapshot(txCollection, (snapshot) => {
+          // Reset stockData
+          ALL_ITEMS.forEach(item => {
+            stockData[item] = { amount: 0, lastTx: null };
+          });
+
+          // Alle Transaktionen sortieren nach Zeit
+          const docs = snapshot.docs.map(d => d.data());
+          docs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+
+          docs.forEach(tx => {
+            if (tx.item && stockData[tx.item]) {
+              const qty = Number(tx.quantity) || 0;
+              if (tx.action === 'add') {
+                stockData[tx.item].amount += qty;
+                stockData[tx.item].lastTx = `+${qty}`;
+              } else if (tx.action === 'remove') {
+                stockData[tx.item].amount -= qty;
+                stockData[tx.item].lastTx = `-${qty}`;
+              }
+            }
+          });
+
+          renderDashboard();
+        }, (error) => {
+          console.error("Firestore Listen Error:", error);
+          document.getElementById('sync-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Offline / Lokal Mode';
+        });
+      } catch (err) {
+        console.error("Snapshot Setup Error:", err);
+      }
+    }
+
+    // DASHBOARD RENDERN
+    window.renderDashboard = function() {
+      const query = (document.getElementById('dashboard-search')?.value || '').toLowerCase();
+      const container = document.getElementById('inventory-list');
+      container.innerHTML = '';
+
+      const filteredItems = ALL_ITEMS.filter(item => item.toLowerCase().includes(query));
+      document.getElementById('item-count-badge').innerText = filteredItems.length;
+
+      filteredItems.forEach(item => {
+        const data = stockData[item] || { amount: 0, lastTx: null };
+        const row = document.createElement('div');
+        row.className = "bg-slate-800/80 border border-slate-700/60 p-3 rounded-xl flex justify-between items-center shadow-sm hover:border-slate-600 transition";
+
+        let badgeHtml = '';
+        if (data.lastTx) {
+          const isPlus = data.lastTx.startsWith('+');
+          badgeHtml = `
+            <span class="text-xs font-bold px-2 py-0.5 rounded-md ${isPlus ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}">
+              Zuletzt: ${data.lastTx}
+            </span>
+          `;
+        } else {
+          badgeHtml = `<span class="text-[10px] text-slate-500">Keine Buchung</span>`;
+        }
+
+        row.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs">
+              <i class="fa-solid fa-box-archive"></i>
+            </div>
+            <div>
+              <div class="font-bold text-slate-100 text-sm">${item}</div>
+              <div>${badgeHtml}</div>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="text-xl font-extrabold ${data.amount > 0 ? 'text-emerald-400' : data.amount < 0 ? 'text-rose-400' : 'text-slate-400'}">${data.amount}</span>
+            <span class="text-[10px] text-slate-400 block">Stück</span>
+          </div>
+        `;
+
+        container.appendChild(row);
+      });
+    };
+
+    // WIZARD POPUP STEUERUNG
+    window.openWizard = function() {
+      wizardSelection = { action: null, item: null };
+      document.getElementById('wizard-search').value = '';
+      document.getElementById('wizard-quantity').value = '';
+      
+      // Reset Buttons
+      document.getElementById('btn-action-add').className = "w-full p-4 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-300 flex items-center justify-between hover:border-emerald-500/50 transition";
+      document.getElementById('btn-action-remove').className = "w-full p-4 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-300 flex items-center justify-between hover:border-rose-500/50 transition";
+      document.getElementById('step1-next-btn').disabled = true;
+      document.getElementById('step2-next-btn').disabled = true;
+
+      filterWizardItems();
+      goToStep(1);
+
+      const modal = document.getElementById('wizard-modal');
+      const content = document.getElementById('wizard-content');
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      content.classList.remove('translate-y-full');
+    };
+
+    window.closeWizard = function() {
+      const modal = document.getElementById('wizard-modal');
+      const content = document.getElementById('wizard-content');
+      content.classList.add('translate-y-full');
+      modal.classList.add('opacity-0', 'pointer-events-none');
+    };
+
+    window.goToStep = function(step) {
+      document.getElementById('step-1').classList.add('hidden');
+      document.getElementById('step-2').classList.add('hidden');
+      document.getElementById('step-3').classList.add('hidden');
+
+      document.getElementById(`step-${step}`).classList.remove('hidden');
+      document.getElementById('wizard-step-indicator').innerText = `Schritt ${step} von 3`;
+
+      if (step === 3) {
+        const actionText = wizardSelection.action === 'add' ? 'Hinzugefügt' : 'Rausgenommen';
+        document.getElementById('selected-summary-badge').innerText = `${wizardSelection.item} • ${actionText}`;
+      }
+    };
+
+    window.selectAction = function(type) {
+      wizardSelection.action = type;
+      const addBtn = document.getElementById('btn-action-add');
+      const rmBtn = document.getElementById('btn-action-remove');
+
+      if (type === 'add') {
+        addBtn.className = "w-full p-4 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-300 flex items-center justify-between transition";
+        rmBtn.className = "w-full p-4 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-400 flex items-center justify-between transition opacity-60";
+      } else {
+        rmBtn.className = "w-full p-4 rounded-xl border-2 border-rose-500 bg-rose-500/10 text-rose-300 flex items-center justify-between transition";
+        addBtn.className = "w-full p-4 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-400 flex items-center justify-between transition opacity-60";
+      }
+
+      document.getElementById('step1-next-btn').disabled = false;
+    };
+
+    window.filterWizardItems = function() {
+      const query = (document.getElementById('wizard-search')?.value || '').toLowerCase();
+      const container = document.getElementById('wizard-items-list');
+      container.innerHTML = '';
+
+      const filtered = ALL_ITEMS.filter(i => i.toLowerCase().includes(query));
+
+      filtered.forEach(item => {
+        const btn = document.createElement('button');
+        const isSelected = wizardSelection.item === item;
+        btn.type = 'button';
+        btn.className = `w-full text-left p-2.5 rounded-lg text-sm flex justify-between items-center transition ${isSelected ? 'bg-indigo-600 text-white font-bold' : 'text-slate-200 hover:bg-slate-800'}`;
+        btn.innerHTML = `
+          <span>${item}</span>
+          ${isSelected ? '<i class="fa-solid fa-check"></i>' : ''}
+        `;
+        btn.onclick = () => {
+          wizardSelection.item = item;
+          document.getElementById('step2-next-btn').disabled = false;
+          filterWizardItems();
+        };
+        container.appendChild(btn);
+      });
+    };
+
+    window.submitTransaction = async function() {
+      const qtyInput = document.getElementById('wizard-quantity');
+      const qty = parseInt(qtyInput.value, 10);
+
+      if (isNaN(qty) || qty <= 0) return;
+
+      try {
+        const txCollection = getTxCollection();
+        await addDoc(txCollection, {
+          action: wizardSelection.action,
+          item: wizardSelection.item,
+          quantity: qty,
+          timestamp: serverTimestamp()
+        });
+
+        closeWizard();
+        switchTab('dashboard');
+      } catch (err) {
+        console.error("Fehler beim Abschicken", err);
+        // Fallback: Lokale Transaktion durchführen, falls Netzwerk/Permissions blockieren
+        if (!stockData[wizardSelection.item]) {
+          stockData[wizardSelection.item] = { amount: 0, lastTx: null };
+        }
+        if (wizardSelection.action === 'add') {
+          stockData[wizardSelection.item].amount += qty;
+          stockData[wizardSelection.item].lastTx = `+${qty}`;
+        } else {
+          stockData[wizardSelection.item].amount -= qty;
+          stockData[wizardSelection.item].lastTx = `-${qty}`;
+        }
+        closeWizard();
+        renderDashboard();
+      }
+    };
+
+    window.switchTab = function(tab) {
+      if (tab === 'dashboard') {
+        renderDashboard();
+      }
+    };
+
+    window.onload = init;
+  </script>
+</body>
+</html>
